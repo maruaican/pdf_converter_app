@@ -1,23 +1,17 @@
 # -*- coding: utf-8 -*-
 import sys
 import os
-import tkinter as tk
-from tkinter import messagebox
 
 from converters import ExcelConverter, WordConverter
 
 
 def main():
+    print("準備をしています...")
+
     # 引数チェック
     if len(sys.argv) < 2:
-        # 引数がない場合は使用方法を表示
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        messagebox.showinfo(
-            "PDF Converter", "Word、Excelファイルを\nこのアイコンにドラッグアンドドロップしてください。"
-        )
-        root.destroy()
+        print("\nWord、Excelファイルをこの実行ファイルにドラッグアンドドロップしてください。")
+        input("\nEnterキーを押して終了してください。")
         return
 
     success_files = []
@@ -30,6 +24,8 @@ def main():
         if not os.path.exists(file_path):
             error_files.append(f"{basename} (ファイルが見つかりません)")
             continue
+
+        print(f"Converting to PDF: {basename}")
 
         _, ext = os.path.splitext(file_path)
         ext = ext.lower()
@@ -62,6 +58,8 @@ def main():
     if result_message_parts:
         final_message = "\n\n".join(result_message_parts)
         print(final_message)
+    
+    input("\n処理が完了しました。Enterキーを押して終了してください。")
 
 
 if __name__ == "__main__":
