@@ -58,24 +58,10 @@ def main():
     if unsupported_files:
         result_message_parts.append("--- 未対応 ---\n" + "\n".join(unsupported_files))
 
-    # 何かしらの結果がある場合のみメッセージボックスを表示
+    # 何かしらの結果がある場合のみメッセージを標準出力
     if result_message_parts:
         final_message = "\n\n".join(result_message_parts)
-        final_message += "\n\n(このウィンドウは5秒後に閉じます)"
-
-        root = tk.Tk()
-        root.withdraw()
-
-        # 5秒で消えるカスタムメッセージボックス
-        dialog = tk.Toplevel(root)
-        dialog.title("変換結果")
-        dialog.attributes("-topmost", True)
-        tk.Label(dialog, text=final_message, padx=20, pady=20).pack()
-
-        # 5000ミリ秒（5秒）後にウィンドウを閉じる
-        dialog.after(5000, dialog.destroy)
-
-        dialog.mainloop()
+        print(final_message)
 
 
 if __name__ == "__main__":
