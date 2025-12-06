@@ -16,7 +16,8 @@ class WordConverter(BaseConverter):
             doc = word.Documents.Open(self.file_path, ReadOnly=True)
             
             # PDFのパスを作成
-            pdf_path = os.path.splitext(self.file_path) + ".pdf"
+            base, ext = os.path.splitext(self.file_path)
+            pdf_path = base + ".pdf"
             
             # PDFとして保存 (17=wdExportFormatPDF)
             # OpenAfterExport=False: 変換後にPDFを開かない

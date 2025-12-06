@@ -20,7 +20,14 @@ def main():
 
     # ファイルごとに処理
     for file_path in sys.argv[1:]:
+        # ファイルパスが空でないことを確認
+        if not file_path or not file_path.strip():
+            continue
+            
+        # パスを正規化
+        file_path = os.path.abspath(file_path.strip())
         basename = os.path.basename(file_path)
+        
         if not os.path.exists(file_path):
             error_files.append(f"{basename} (ファイルが見つかりません)")
             continue
@@ -43,7 +50,10 @@ def main():
             else:
                 unsupported_files.append(basename)
         except Exception as e:
-            error_files.append(f"{basename} (エラー: {e})")
+            error_message = str(e).strip()
+            if not error_message:
+                error_message = "不明なエラーが発生しました"
+            error_files.append(f"{basename} (エラー: {error_message})")
 
     # 結果メッセージの生成
     result_message_parts = []
@@ -58,6 +68,8 @@ def main():
     if result_message_parts:
         final_message = "\n\n".join(result_message_parts)
         print(final_message)
+    else:
+        print("\n処理するファイルがありませんでした。")
     
     input("\n処理が完了しました。Enterキーを押して終了してください。")
 
