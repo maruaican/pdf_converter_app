@@ -1,31 +1,45 @@
 import os
 import win32com.client
+import pythoncom
 from .base_converter import BaseConverter
 
 class WordConverter(BaseConverter):
     def convert(self):
         word = None
         doc = None
+        pythoncom.CoInitialize()
         try:
-            word = win32com.client.Dispatch("Word.Application")
+            # DispatchEx を使用して新しいインスタンスを強制する
+            word = win32com.client.DispatchEx("Word.Application")
             word.Visible = False
-            word.DisplayAlerts = False
-            word.ScreenUpdating = False
+            word.DisplayAlerts = 0 # wdAlertsNone
             
-            # ReadOnly=True で開き、変更確認などを抑制
-            doc = word.Documents.Open(self.file_path, ReadOnly=True)
+            # 絶対パスを使用
+            abs_path = os.path.abspath(self.file_path)
             
             # PDFのパスを作成
-            base, ext = os.path.splitext(self.file_path)
+            base, ext = os.path.splitext(abs_path)
             pdf_path = base + ".pdf"
             
+            # 既存のPDFがあれば削除を試みる
+            if os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                except:
+                    pass
+
+            # ReadOnly=True で開き、変更確認などを抑制
+            doc = word.Documents.Open(abs_path, ReadOnly=True, ConfirmConversions=False)
+            
             # PDFとして保存 (17=wdExportFormatPDF)
-            # OpenAfterExport=False: 変換後にPDFを開かない
             doc.ExportAsFixedFormat(
                 OutputFileName=pdf_path,
                 ExportFormat=17,
                 OpenAfterExport=False,
                 OptimizeFor=0, # 0=wdExportOptimizeForPrint
+                Range=0, # 0=wdExportAllDocument
+                From=1,
+                To=1,
                 Item=0, # 0=wdExportDocumentContent
                 IncludeDocProps=True,
                 KeepIRM=True,
@@ -39,8 +53,13 @@ class WordConverter(BaseConverter):
             raise e
         finally:
             if doc:
-                # SaveChanges=0 (wdDoNotSaveChanges)
-                doc.Close(SaveChanges=0)
+                try:
+                    doc.Close(SaveChanges=0) # 0=wdDoNotSaveChanges
+                except:
+                    pass
             if word:
-                word.ScreenUpdating = True
-                word.Quit()
+                try:
+                    word.Quit()
+                except:
+                    pass
+            pythoncom.CoUninitialize()

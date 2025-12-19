@@ -1,23 +1,34 @@
-
 import os
 import win32com.client
+import pythoncom
 from .base_converter import BaseConverter
 
 class ExcelConverter(BaseConverter):
     def convert(self):
         excel = None
         wb = None
+        pythoncom.CoInitialize()
         try:
-            # COMオブジェクト初期化
-            excel = win32com.client.Dispatch("Excel.Application")
+            # DispatchEx を使用
+            excel = win32com.client.DispatchEx("Excel.Application")
             excel.Visible = False
             excel.DisplayAlerts = False
             excel.Interactive = False
-            excel.ScreenUpdating = False
 
             # ファイルパスを絶対パスに変換
             abs_file_path = os.path.abspath(self.file_path)
             
+            # PDF出力パスを準備
+            base, ext = os.path.splitext(abs_file_path)
+            pdf_path = base + ".pdf"
+            
+            # 既存のPDFがあれば削除を試みる
+            if os.path.exists(pdf_path):
+                try:
+                    os.remove(pdf_path)
+                except:
+                    pass
+
             # ワークブックを開く
             wb = excel.Workbooks.Open(
                 abs_file_path,
@@ -25,15 +36,6 @@ class ExcelConverter(BaseConverter):
                 ReadOnly=True,
                 IgnoreReadOnlyRecommended=True
             )
-
-            # PDF出力パスを準備
-            base, ext = os.path.splitext(abs_file_path)
-            pdf_path = base + ".pdf"
-            
-            # 出力ディレクトリが存在するか確認
-            output_dir = os.path.dirname(pdf_path)
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
 
             # PDFエクスポート
             wb.ExportAsFixedFormat(
@@ -51,16 +53,24 @@ class ExcelConverter(BaseConverter):
             raise RuntimeError(f"Excel to PDF変換に失敗しました: {str(e)}")
         finally:
             if wb:
-                wb.Close(SaveChanges=False)
+                try:
+                    wb.Close(SaveChanges=False)
+                except:
+                    pass
             if excel:
-                excel.ScreenUpdating = True
-                excel.Interactive = True
-                excel.Quit()
+                try:
+                    excel.Quit()
+                except:
+                    pass
+            pythoncom.CoUninitialize()
 
     @staticmethod
     def is_available():
+        pythoncom.CoInitialize()
         try:
             win32com.client.Dispatch("Excel.Application")
             return True
         except Exception:
             return False
+        finally:
+            pythoncom.CoUninitialize()
