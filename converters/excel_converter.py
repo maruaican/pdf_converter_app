@@ -37,7 +37,9 @@ class ExcelConverter(BaseConverter):
                 IgnoreReadOnlyRecommended=True
             )
 
-            # PDFエクスポート
+            # 全シートをPDF化するために、ワークブック全体をエクスポート対象にする
+            # ExportAsFixedFormat の引数で Type=0 (xlTypePDF) を指定
+            # ワークブックオブジェクトに対して呼び出すことで全シートが対象となる
             wb.ExportAsFixedFormat(
                 Type=0,  # xlTypePDF
                 Filename=pdf_path,
