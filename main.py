@@ -1,49 +1,167 @@
-# -*- coding: utf-8 -*-
 import sys
 import os
+import io
 
-# 最初に「準備をしています...」を表示（インポート等で時間がかかる前に行う）
-print("準備をしています...")
-sys.stdout.flush()
+# 1. 最初にメッセージを表示
+# Windowsコンソールでの文字化けを最小限にするため、
+# インポート直後にエンコーディングを設定
+if sys.platform == "win32":
+    try:
+        # 標準出力がリダイレクトされていないか確認
+        if sys.stdout and hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if sys.stderr and hasattr(sys.stderr, 'buffer'):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
-# pythoncomの初期化をメインスレッドで行う
-import pythoncom
-from converters import ExcelConverter, WordConverter
+print("分析・変換をしています。しばらくお待ちください...")
+if sys.stdout:
+    sys.stdout.flush()
 
+# -*- coding: utf-8 -*-
+
+
+# 2. 標準ライブラリのインポート
+from datetime import datetime
+import tkinter as tk
+from tkinter import simpledialog, messagebox
 
 def main():
-    # 標準出力のエンコーディングをUTF-8に設定（Windows環境での文字化け対策）
+    # --- PyInstaller EXE の argv を Unicode に強制統一 ---
+    # Windows環境での文字化け対策
     if sys.platform == "win32":
-        import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        import ctypes
+        from ctypes import wintypes
 
-    # 引数チェック
-    if len(sys.argv) < 2:
-        print("\nWord、Excelファイルをこの実行ファイルにドラッグアンドドロップしてください。")
-        # 実行ファイルとして実行されている場合のみ入力を待つ
+        def get_unicode_argv():
+            """WindowsのGetCommandLineWを使用してUnicodeの引数リストを取得する"""
+            GetCommandLineW = ctypes.windll.kernel32.GetCommandLineW
+            GetCommandLineW.restype = wintypes.LPCWSTR
+            CommandLineToArgvW = ctypes.windll.shell32.CommandLineToArgvW
+            CommandLineToArgvW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
+            CommandLineToArgvW.restype = ctypes.POINTER(wintypes.LPWSTR)
+            
+            argc = ctypes.c_int(0)
+            argv_unicode = CommandLineToArgvW(GetCommandLineW(), ctypes.byref(argc))
+            if not argv_unicode:
+                return sys.argv
+            
+            try:
+                return [argv_unicode[i] for i in range(argc.value)]
+            finally:
+                ctypes.windll.kernel32.LocalFree(argv_unicode)
+
+        sys.argv = get_unicode_argv()
+
+    # 重いモジュールのインポート
+    try:
+        import pythoncom
+        from converters import ExcelConverter, WordConverter
+    except Exception as e:
+        print(f"モジュールの読み込みに失敗しました: {e}")
         if getattr(sys, 'frozen', False):
             input("\nEnterキーを押して終了してください。")
         return
 
-    success_info = []
-    error_files = []
-    unsupported_files = []
+    # 引数チェック
+    if len(sys.argv) < 2:
+        print("\nWord、Excelファイルをこの実行ファイルにドラッグアンドドロップしてください。")
+        if getattr(sys, 'frozen', False):
+            input("\nEnterキーを押して終了してください。")
+        return
 
-    # ファイルごとに処理
+    # 対応拡張子のチェック
+    supported_extensions = [".xlsx", ".xls", ".xlsm", ".docx", ".doc"]
+    files_to_process = []
+    unsupported_found = False
+
     for file_path in sys.argv[1:]:
-        # ファイルパスが空でないことを確認
         if not file_path or not file_path.strip():
             continue
-            
-        # パスを正規化
-        file_path = os.path.abspath(file_path.strip())
-        basename = os.path.basename(file_path)
-        dirname = os.path.dirname(file_path)
         
-        if not os.path.exists(file_path):
-            error_files.append(f"{basename} (ファイルが見つかりません)")
+        clean_path = file_path.strip().strip('"')
+        if not os.path.exists(clean_path):
             continue
+
+        ext = os.path.splitext(clean_path)[1].lower()
+        if ext in supported_extensions:
+            files_to_process.append(os.path.abspath(clean_path))
+        else:
+            unsupported_found = True
+
+    if unsupported_found and not files_to_process:
+        print("\nエラー: Word または Excelファイルのみ対応しています。")
+        if getattr(sys, 'frozen', False) or sys.stdin.isatty():
+            input("\nEnterキーを押して終了してください。")
+        return
+
+    if not files_to_process:
+        print("\n処理対象のファイルが見つかりませんでした。")
+        if getattr(sys, 'frozen', False):
+            input("\nEnterキーを押して終了してください。")
+        return
+
+    # 保存先フォルダの決定（ポップアップウィンドウ）
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    
+    # IMEの制御やエンコーディングの問題を避けるため、
+    # ダイアログを表示する前に一度ダミーのウィンドウでフォーカスを制御するなどの対策
+    
+    base_dir = os.path.dirname(files_to_process[0])
+    date_str = datetime.now().strftime("%Y%m%d")
+    default_name = f"{date_str}_"
+    
+    prompt_msg = "元のファイルと同じ場所に新たなフォルダを作ります。\nフォルダ名称を入力してください。"
+    
+    # simpledialogの代わりに、より安定した方法を検討
+    # ここでは標準のダイアログを使用しつつ、親ウィンドウを明示
+    user_input = simpledialog.askstring("フォルダ作成", prompt_msg, initialvalue=default_name, parent=root)
+    
+    if user_input is None:
+        print("\nキャンセルされました。")
+        return
+
+    # 文字化け対策: Windows環境でTkinterからの入力が稀に文字化けする場合の考慮
+    # 通常TkinterはUnicodeで返すが、環境によって不正なバイトが含まれる可能性を考慮
+    try:
+        folder_name = user_input.strip()
+    except Exception:
+        # 万が一のフォールバック
+        folder_name = default_name
+    
+    print(f"DEBUG user_input: {repr(folder_name)}")
+    if not folder_name:
+        folder_name = default_name
+
+    output_dir = os.path.join(base_dir, folder_name)
+
+    try:
+        print(f"DEBUG folder_name: {repr(folder_name)}")
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            print(f"フォルダを作成しました: {folder_name}")
+    except Exception as e:
+        print(f"フォルダの作成に失敗しました: {e}")
+        output_dir = base_dir
+
+    success_info = []
+    error_files = []
+
+    # ファイルごとに処理
+    for file_path in files_to_process:
+        basename = os.path.basename(file_path)
+        pdf_name = os.path.splitext(basename)[0] + ".pdf"
+        pdf_path = os.path.join(output_dir, pdf_name)
+
+        # 上書き確認
+        if os.path.exists(pdf_path):
+            confirm_msg = f"ファイル '{pdf_name}' は既に存在します。\n上書きしますか？"
+            if not messagebox.askyesno("上書き確認", confirm_msg, parent=root):
+                print(f"スキップしました: {basename}")
+                continue
 
         print(f"PDFに変換中: {basename}")
 
@@ -58,44 +176,29 @@ def main():
                 converter = WordConverter(file_path)
 
             if converter:
-                converter.convert()
-                # 変換後のファイル名（拡張子をpdfに変更）
-                pdf_name = os.path.splitext(basename)[0] + ".pdf"
+                pdf_path = converter.convert(output_dir=output_dir)
                 success_info.append({
-                    'dir': dirname,
-                    'file': pdf_name
+                    'dir': output_dir,
+                    'file': os.path.basename(pdf_path)
                 })
-            else:
-                unsupported_files.append(basename)
         except Exception as e:
             error_message = str(e).strip()
             if not error_message:
                 error_message = "不明なエラーが発生しました"
             error_files.append(f"{basename} (エラー: {error_message})")
 
-    # 結果メッセージの生成
-    result_message_parts = []
+    # 結果表示
     if success_info:
-        success_lines = ["--- 成功 ---"]
+        print("\n--- 成功 ---")
         for info in success_info:
-            success_lines.append(f"場所: {info['dir']}")
-            success_lines.append(f"ファイル: {info['file']}")
-            success_lines.append("") # 空行
-        result_message_parts.append("\n".join(success_lines))
+            print(f"保存先: {info['dir']}")
+            print(f"ファイル: {info['file']}\n")
         
     if error_files:
-        result_message_parts.append("--- 失敗 ---\n" + "\n".join(error_files))
-    if unsupported_files:
-        result_message_parts.append("--- 未対応 ---\n" + "\n".join(unsupported_files))
+        print("\n--- 失敗 ---")
+        for err in error_files:
+            print(err)
 
-    # 何かしらの結果がある場合のみメッセージを標準出力
-    if result_message_parts:
-        final_message = "\n\n".join(result_message_parts)
-        print(final_message)
-    else:
-        print("\n処理するファイルがありませんでした。")
-    
-    # 実行ファイルとして実行されている場合、または標準入力が端末の場合のみ入力を待つ
     if getattr(sys, 'frozen', False) or sys.stdin.isatty():
         input("\n処理が完了しました。Enterキーを押して終了してください。")
 

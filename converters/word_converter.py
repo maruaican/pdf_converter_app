@@ -4,7 +4,7 @@ import pythoncom
 from .base_converter import BaseConverter
 
 class WordConverter(BaseConverter):
-    def convert(self):
+    def convert(self, output_dir=None):
         word = None
         doc = None
         pythoncom.CoInitialize()
@@ -18,8 +18,13 @@ class WordConverter(BaseConverter):
             abs_path = os.path.abspath(self.file_path)
             
             # PDFのパスを作成
-            base, ext = os.path.splitext(abs_path)
-            pdf_path = base + ".pdf"
+            basename = os.path.basename(abs_path)
+            pdf_name = os.path.splitext(basename)[0] + ".pdf"
+            
+            if output_dir:
+                pdf_path = os.path.join(output_dir, pdf_name)
+            else:
+                pdf_path = os.path.splitext(abs_path)[0] + ".pdf"
             
             # 既存のPDFがあれば削除を試みる
             if os.path.exists(pdf_path):
@@ -48,6 +53,8 @@ class WordConverter(BaseConverter):
                 BitmapMissingFonts=True,
                 UseISO19005_1=False
             )
+            
+            return pdf_path
             
         except Exception as e:
             raise e

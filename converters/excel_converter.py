@@ -4,7 +4,7 @@ import pythoncom
 from .base_converter import BaseConverter
 
 class ExcelConverter(BaseConverter):
-    def convert(self):
+    def convert(self, output_dir=None):
         excel = None
         wb = None
         pythoncom.CoInitialize()
@@ -19,8 +19,13 @@ class ExcelConverter(BaseConverter):
             abs_file_path = os.path.abspath(self.file_path)
             
             # PDF出力パスを準備
-            base, ext = os.path.splitext(abs_file_path)
-            pdf_path = base + ".pdf"
+            basename = os.path.basename(abs_file_path)
+            pdf_name = os.path.splitext(basename)[0] + ".pdf"
+            
+            if output_dir:
+                pdf_path = os.path.join(output_dir, pdf_name)
+            else:
+                pdf_path = os.path.splitext(abs_file_path)[0] + ".pdf"
             
             # 既存のPDFがあれば削除を試みる
             if os.path.exists(pdf_path):
@@ -37,9 +42,11 @@ class ExcelConverter(BaseConverter):
                 IgnoreReadOnlyRecommended=True
             )
 
+            # 各シートの印刷設定を調整
+            for sheet in wb.Sheets:
+                self._adjust_print_settings(sheet)
+
             # 全シートをPDF化するために、ワークブック全体をエクスポート対象にする
-            # ExportAsFixedFormat の引数で Type=0 (xlTypePDF) を指定
-            # ワークブックオブジェクトに対して呼び出すことで全シートが対象となる
             wb.ExportAsFixedFormat(
                 Type=0,  # xlTypePDF
                 Filename=pdf_path,
@@ -65,6 +72,13 @@ class ExcelConverter(BaseConverter):
                 except:
                     pass
             pythoncom.CoUninitialize()
+
+    def _adjust_print_settings(self, sheet):
+        """
+        シートの印刷設定を調整する
+        """
+        # ユーザーの改ページ設定を尊重するため、自動調整は行わない
+        pass
 
     @staticmethod
     def is_available():
